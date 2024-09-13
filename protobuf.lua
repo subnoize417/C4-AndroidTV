@@ -164,6 +164,15 @@ function DecodeWire(Data, Level)
 				else
 					--print("Test")
 				end
+			elseif(BytesRemaining == (StringLength.Value + 1)) then
+				local SubWireBegin = CurrentPosition - StringLength.Bytes
+				local SubWire = DecodeWire(Data:sub(CurrentPosition, CurrentPosition + StringLength.Value + 1), Level+1)
+				
+				if (#SubWire > 0 or table.map_length(SubWire) > 0) then
+					Message[Tag.FieldID] = SubWire
+				else
+					--print("Test")
+				end
 			end
 			CurrentPosition = CurrentPosition + StringLength.Value
 
