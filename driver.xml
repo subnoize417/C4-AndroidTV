@@ -801,7 +801,7 @@
               <certificate>./AndroidTV.p12</certificate>
               <private_key protected="True">./AndroidTV.p12</private_key>
               <verify_mode>none</verify_mode>
-              <method>tlsv1</method>
+              <method>tlsv13</method>
             </port>
             <port>
               <number>6467</number>
@@ -811,7 +811,7 @@
               <certificate>./AndroidTV.p12</certificate>
               <private_key protected="True">./AndroidTV.p12</private_key>
               <verify_mode>none</verify_mode>
-              <method>tlsv1</method>
+              <method>tlsv13</method>
             </port>
           </ports>
         </class>
