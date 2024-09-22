@@ -26,8 +26,27 @@ function OnDriverInit(driverInitType)
 	elseif (driverInitType == "DIT_UPDATING") then
 	-- Initialization needed only after a driver update
 	end
+	PASSTHROUGH_PROXY = 5001		-- set this to the proxy ID that should handle all passthrough commands from minidrivers
+	SWITCHER_PROXY = 5002			-- set this to the proxy ID of the SET_INPUT capable device that has the RF_MINI_APP connections (may be the same as PASSTHROUGH_PROXY)
+	USES_DEDICATED_SWITCHER = true	-- set this to false if the driver did not need the dedicated avswitch proxy (e.g. this is a TV/receiver)
+	MINIAPP_BINDING_START = 3101	-- set this to the first binding ID in the XML for the RF_MINI_APP connections
+	MINIAPP_BINDING_END = 3109		-- set this to the last binding ID in the XML for the RF_MINI_APP connections
+	MINIAPP_TYPE = 'UM_ANDROID_TV'		-- set this to your unique name as defined in the minidriver SERVICE_IDS table
 end
 
+function OnDriverLateInit ()
+	if (USES_DEDICATED_SWITCHER) then
+		HideProxyInAllRooms (SWITCHER_PROXY)
+	end
+	RegisterRooms ()
+end
+
+function OnSystemEvent (event)
+	local eventname = string.match (event, '.-name="(.-)"')
+	if (eventname == 'OnPIP') then
+		RegisterRooms ()
+	end
+end
 
 function ExecuteCommand(strCommand, tQueryParams)
 	DebugHeader("ExecuteCommand(" .. strCommand .. ")")
@@ -153,6 +172,12 @@ function ReceivedFromProxy(BindingID, strCommand, tParams)
 			LUA_ACTION.ConnectToCommand(nil)
 	end
 
+	if (BindingID == SWITCHER_PROXY and strCommand == 'PASSTHROUGH') then
+		BindingID = PASSTHROUGH_PROXY
+		strCommand = tParams.PASSTHROUGH_COMMAND
+	end
+
+
 	if (BindingID == 5001) then
 		if (strCommand == "ON") then
 			if (Properties["Send WOL on ON"] == "True") then
@@ -179,14 +204,98 @@ function ReceivedFromProxy(BindingID, strCommand, tParams)
 			end
 		end
 	
-elseif (BindingID==5002) then -- Mini Driver Commands
-		--TODO: Implement Mini Drivers
-		DebugDivider("!")
-		Debug("COMMAND UNKNOWN (Mini Driver Switch): "..strCommand)
-		DebugDivider("!")
+elseif (BindingID==5002) then 
+	if (strCommand == 'SET_INPUT') then
+		local input = tonumber (tParams.INPUT)
+		print ('Input ' .. input)
+		if (input >= MINIAPP_BINDING_START and input <= MINIAPP_BINDING_END) then
+			-- Get the device ID of the proxy handling the miniapp switch on this driver
+			local proxyDeviceId, _ = next (C4:GetBoundConsumerDevices (C4:GetDeviceID (), BindingID))
+
+			-- Get the device ID of the minidriver proxy connected to the requested input on this driver
+			local appProxyId = C4:GetBoundProviderDevice (proxyDeviceId, input)
+
+			-- Get the device ID of the minidriver protocol connected to the minidriver proxy
+			local appDeviceId = C4:GetBoundProviderDevice (appProxyId, 5001)
+
+			-- get the details for the app for this kind of universal-minidriver-compatible type
+			local appId = GetRelevantUniversalAppId (appDeviceId, MINIAPP_TYPE)
+			local appName = GetRelevantUniversalAppId (appDeviceId, 'APP_NAME')
+
+			-- there is now enough information to launch the application using the protocol for this device
+
+			-- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+			-- =-=-=-=-=-=-=-= YOUR DEVICE-SPECIFIC APP LAUNCHING CODE GOES HERE... -=-=-=-=-=-=-=
+			-- =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+			Debug ('MINIAPP_TYPE ' .. MINIAPP_TYPE)
+			Debug ('appId ' .. appId)
+			Debug ('appName ' .. appName)
+			SendURL(appId)
+			-- there is now enough information to launch the application using the protocol for this device
+
+			if ((Properties ['Passthrough Mode'] or 'On') ~= 'On') then
+				local passthroughProxyDeviceId, _ = next (C4:GetBoundConsumerDevices (C4:GetDeviceID (), PASSTHROUGH_PROXY))
+				local _timer = function (timer)
+				--local deviceId = C4:GetDeviceID()
+				--local roomId = C4:RoomGetId ()
+					print ('Looking for passthroughProxyDeviceId ' .. passthroughProxyDeviceId)
+					print ('Looking for passthroughProxyDeviceId _ ' .. _)
+					print ('Looking for appProxyId ' .. appProxyId)
+					print ('Looking for roomId ' .. roomId)
+					print ('Looking for deviceId ' .. deviceId)
+					for roomId, deviceId in pairs (RoomIDSources) do
+						if (deviceId == appProxyId) then
+							print('selecting video device ' .. passthroughProxyDeviceId)
+							C4:SendToDevice (roomId, 'SELECT_VIDEO_DEVICE', {deviceid = passthroughProxyDeviceId})
+						end
+					end
+				end
+				C4:SetTimer (500, _timer)
+			end
+		end
+	end
+end
+end
+function GetRelevantUniversalAppId (deviceId, source)
+	local vars = C4:GetDeviceVariables (deviceId)
+	for _, var in pairs (vars) do
+		if (var.name == source) then
+			return (var.value)
+		end
+	end
+	if (source ~= 'APP_ID') then
+		-- try getting pre-universal minidriver app ID to launch.
+		return (GetRelevantUniversalAppId (deviceId, 'APP_ID'))
 	end
 end
 
+--COPY
+function HideProxyInAllRooms (BindingID)
+	BindingID = BindingID or 0
+	if (BindingID == 0) then return end -- silently fail if no binding passed in
+
+	-- Get Bound Proxy's Device ID / Name.
+	local id, name = next (C4:GetBoundConsumerDevices (C4:GetDeviceID (), BindingID))
+
+	dbg ('Hiding ' .. name .. ' in all rooms')
+
+	-- Send hide command to all rooms, for 'ALL' Navigator groups.
+	for roomId, roomName in pairs (C4:GetDevicesByC4iName ('roomdevice.c4i') or {}) do
+		dbg ('Hiding ' .. name .. ' in ' .. roomName)
+		C4:SendToDevice (roomId, 'SET_DEVICE_HIDDEN_STATE', {PROXY_GROUP = 'ALL', DEVICE_ID = id, IS_HIDDEN = true})
+	end
+end
+
+--COPY
+function RegisterRooms ()
+	RoomIDs = C4:GetDevicesByC4iName ('roomdevice.c4i')
+	RoomIDSources = {}
+	for roomId, _ in pairs (RoomIDs) do
+		RoomIDSources [roomId] = tonumber (C4:GetDeviceVariable (roomId, 1000)) or 0
+		C4:UnregisterVariableListener (roomId, 1000)
+		C4:RegisterVariableListener (roomId, 1000)
+	end
+end
 
 function ProcessInputCommand(CMD, tParams)
 	if (CMD == "GUIDE" or CMD == "START_GUIDE" or CMD == "PULSE_GUIDE" or CMD == "STOP_GUIDE" or CMD == "END_GUIDE") then
@@ -429,6 +538,14 @@ function ProcessNetworkMessage(Message)
 		C4:FireEventByID(EventID_CurrentAppChanged) -- CurrentAppChanged
 		
 	elseif(FingerPrint == "[F1][F1][WT0][F2][F1][WT2][F2][WT2][F3][WT0][F4][WT2][F5][WT2][F6][WT2]") then
+		Debug("DEVICE DESCRIPTOR")
+		C4:UpdateProperty("Model Name",						WireMessage[1][2][1].Value)
+		C4:UpdateProperty("Vendor Name",					WireMessage[1][2][2].Value)
+		C4:UpdateProperty("Device Version",				WireMessage[1][2][4].Value)
+		C4:UpdateProperty("Device Package Name",	WireMessage[1][2][5].Value)
+		C4:UpdateProperty("Device App Version",		WireMessage[1][2][6].Value)
+		SendDriverDescriptorPayload()
+	elseif(FingerPrint == "[F1][F1][WT0][F2][F1][WT2][F2][WT2][F3][WT0][F4][WT2][F5][WT2][F6][WT2][F3][WT0]") then
 		Debug("DEVICE DESCRIPTOR")
 		C4:UpdateProperty("Model Name",						WireMessage[1][2][1].Value)
 		C4:UpdateProperty("Vendor Name",					WireMessage[1][2][2].Value)
