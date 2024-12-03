@@ -5,8 +5,8 @@
   <model>AndroidTV</model>
   <creator>Greg Moerler</creator>
   <created>08/01/2022 12:00 PM</created>
-  <modified>08/07/2022 4:20 PM</modified>
-  <version>4</version>
+  <modified>09/20/2024 4:20 PM</modified>
+  <version>8</version>
   <control>lua_gen</control>
   <driver>DriverWorks</driver>
   <small image_source="c4z">icons/device_sm.png</small>
@@ -129,6 +129,17 @@
         <default>OFF</default>
         <readonly>false</readonly>
       </property>
+      <property>
+				<name>Passthrough Mode</name>
+				<type>LIST</type>
+				<items>
+					<item>Off</item>
+					<item>On</item>
+				</items>
+				<default>On</default>
+				<readonly>false</readonly>
+				<tooltip>If set to 'On', mini-apps will stay selected and pass-through commands.	If 'Off', this driver will be reselected.</tooltip>
+			</property>
       <property>
         <name>LaunchAppHeader</name>
         <type>LABEL</type>
@@ -801,7 +812,7 @@
               <certificate>./AndroidTV.p12</certificate>
               <private_key protected="True">./AndroidTV.p12</private_key>
               <verify_mode>none</verify_mode>
-              <method>tlsv1</method>
+              <method>tlsv13</method>
             </port>
             <port>
               <number>6467</number>
@@ -811,9 +822,23 @@
               <certificate>./AndroidTV.p12</certificate>
               <private_key protected="True">./AndroidTV.p12</private_key>
               <verify_mode>none</verify_mode>
-              <method>tlsv1</method>
+              <method>tlsv13</method>
             </port>
           </ports>
+        </class>
+      </classes>
+    </connection>
+    <connection proxybindingid="5001">
+      <id>1001</id>
+      <connectionname>HDMI 1</connectionname>
+      <facing>6</facing>
+      <type>5</type>
+      <consumer>true</consumer>
+      <audiosource>false</audiosource>
+      <videosource>false</videosource>
+      <classes>
+        <class>
+          <classname>HDMI</classname>
         </class>
       </classes>
     </connection>
@@ -838,6 +863,26 @@
       <classes>
         <class>
           <classname>AVSWITCH</classname>
+        </class>
+      </classes>
+    </connection>
+    <connection proxybindingid="5001">
+      <id>7000</id>
+      <connectionname>Room Selection - Output</connectionname>
+      <facing>6</facing>
+      <type>7</type>
+      <consumer>false</consumer>
+      <audiosource>true</audiosource>
+      <videosource>true</videosource>
+      <classes>
+        <class>
+          <classname>AUDIO_SELECTION</classname>
+        </class>
+        <class>
+          <classname>AUDIO_VOLUME</classname>
+        </class>
+        <class>
+          <classname>VIDEO_SELECTION</classname>
         </class>
       </classes>
     </connection>
